@@ -21,9 +21,10 @@ concurrency:
 
 permissions:
     contents: write # create the built/<version> sentinel tag
+    actions: write # cancel the run when publish secrets are missing
 
 env:
-    # Docker Hub repository to publish to once deploy is enabled (TODO).
+    # Docker Hub repository to publish to.
     IMAGE_NAME: mxaddict/navio
 
 jobs:
@@ -68,6 +69,28 @@ jobs:
                           ;;
                   esac
 
+            # Publishing requires Docker Hub credentials. When they are absent,
+            # cancel the run (it ends as "cancelled", not "failed") instead of
+            # building an image that can never be pushed. PR/test builds never
+            # publish, so they skip this gate.
+            - name: Require Docker Hub secrets to publish
+              if: steps.decide.outputs.build == 'true' && github.event_name != 'pull_request'
+              env:
+                  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+                  DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+                      echo "Docker Hub secrets present — proceeding to publish"
+                      exit 0
+                  fi
+                  echo "::warning::DOCKERHUB_USERNAME/DOCKERHUB_TOKEN not set — cancelling run"
+                  gh api -X POST "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"
+                  # Block here so later publish steps never start before the
+                  # cancellation lands; fail closed if it somehow doesn't.
+                  for _ in $(seq 1 30); do sleep 10; done
+                  exit 1
+
             - name: Set up QEMU
               if: steps.decide.outputs.build == 'true'
               uses: docker/setup-qemu-action@v4
@@ -88,24 +111,21 @@ jobs:
                       type=ref,event=pr
                       type=sha
 
-            # TODO(deploy): log in to Docker Hub before enabling push.
-            # Requires repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN.
-            # - name: Log in to Docker Hub
-            #   if: steps.decide.outputs.build == 'true' && github.event_name != 'pull_request'
-            #   uses: docker/login-action@v4
-            #   with:
-            #       username: ${{ secrets.DOCKERHUB_USERNAME }}
-            #       password: ${{ secrets.DOCKERHUB_TOKEN }}
+            - name: Log in to Docker Hub
+              if: steps.decide.outputs.build == 'true' && github.event_name != 'pull_request'
+              uses: docker/login-action@v4
+              with:
+                  username: ${{ secrets.DOCKERHUB_USERNAME }}
+                  password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-            - name: Build (test, no push)
+            - name: Build and push
               if: steps.decide.outputs.build == 'true'
               uses: docker/build-push-action@v7
               with:
                   context: .
                   platforms: linux/amd64,linux/arm64
-                  # TODO(deploy): set push to `github.event_name != 'pull_request'`
-                  # once Docker Hub credentials are configured above.
-                  push: false
+                  # Publish on every non-PR event; PRs build for verification only.
+                  push: ${{ github.event_name != 'pull_request' }}
                   tags: ${{ steps.meta.outputs.tags }}
                   labels: ${{ steps.meta.outputs.labels }}
                   annotations: ${{ steps.meta.outputs.annotations }}
@@ -115,15 +135,14 @@ jobs:
                   # provenance: true
                   # sbom: true
 
-            # TODO(deploy): keep the Docker Hub repo overview in sync with README.
-            # - name: Sync Docker Hub description
-            #   if: steps.decide.outputs.build == 'true' && github.event_name != 'pull_request'
-            #   uses: peter-evans/dockerhub-description@v5
-            #   with:
-            #       username: ${{ secrets.DOCKERHUB_USERNAME }}
-            #       password: ${{ secrets.DOCKERHUB_TOKEN }}
-            #       repository: ${{ env.IMAGE_NAME }}
-            #       short-description: "Thin Navio full-node image built from official release binaries"
+            - name: Sync Docker Hub description
+              if: steps.decide.outputs.build == 'true' && github.event_name != 'pull_request'
+              uses: peter-evans/dockerhub-description@v5
+              with:
+                  username: ${{ secrets.DOCKERHUB_USERNAME }}
+                  password: ${{ secrets.DOCKERHUB_TOKEN }}
+                  repository: ${{ env.IMAGE_NAME }}
+                  short-description: 'Thin Navio full-node image built from official release binaries'
 
             - name: Record built release
               # Mark this release as built so scheduled/dispatch polls skip it.

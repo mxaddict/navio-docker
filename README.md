@@ -18,8 +18,8 @@ compilation happens in this repo; it only packages upstream releases.
 
 ## Usage
 
-> Publishing to Docker Hub is not wired up yet — see [Deploy](#deploy-todo). For
-> now, build the image locally.
+> Once published, pull `mxaddict/navio` from Docker Hub (see
+> [Publishing to Docker Hub](#publishing-to-docker-hub)). To build it yourself:
 
 ```bash
 docker build -t navio .
@@ -96,8 +96,9 @@ docker build --build-arg NAVIO_RELEASE_TAG=v0.1rc30 -t navio:rc30 .
 ## CI
 
 [`.github/workflows/build.yml`](.github/workflows/build.yml) builds the image
-for `linux/amd64` and `linux/arm64` on every push and PR. It currently runs
-**test builds only** (`push: false`).
+for `linux/amd64` and `linux/arm64`. Pull requests build for verification only
+(no push); every other event (push to `master`, schedule, dispatch, manual)
+**publishes to Docker Hub**.
 
 ### Automatic rebuilds on new navio-core releases
 
@@ -132,19 +133,22 @@ jobs:
           GH_TOKEN: ${{ secrets.NAVIO_DOCKER_DISPATCH_PAT }}
 ```
 
-## Deploy (TODO)
+## Publishing to Docker Hub
 
-Publishing to Docker Hub is intentionally left as a follow-up. The workflow
-already resolves meaningful image tags (`<navio-version>`, `latest`, `pr-N`,
-`sha-…`); to turn on publishing:
+Publishing is enabled in the workflow (login → build+push → description sync).
+Image tags: `<navio-version>`, `latest`, `pr-N`, `sha-…`. It needs two pieces of
+setup:
 
-1. Create a Docker Hub repository (default target: `mxaddict/navio`).
+1. Create the Docker Hub repository (default target: `mxaddict/navio`).
 2. Add repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (use a
    Docker Hub access token, not your account password).
-3. Uncomment the **Log in to Docker Hub** step in the workflow.
-4. Set the build step's `push` to `github.event_name != 'pull_request'`.
-5. (Optional) Enable `provenance`/`sbom` attestations and the **Sync Docker Hub
-   description** step — both are scaffolded as TODOs in the workflow.
+
+**If the secrets are missing**, a publishing run does not fail — it **cancels
+itself** before building, so it never produces an image that cannot be pushed.
+PR/test builds skip this gate entirely (they never publish).
+
+Optional: enable `provenance`/`sbom` attestations — scaffolded as TODOs in the
+build step.
 
 ## License
 
