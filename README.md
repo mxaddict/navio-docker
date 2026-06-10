@@ -96,9 +96,41 @@ docker build --build-arg NAVIO_RELEASE_TAG=v0.1rc30 -t navio:rc30 .
 ## CI
 
 [`.github/workflows/build.yml`](.github/workflows/build.yml) builds the image
-for `linux/amd64` and `linux/arm64` on every push and PR, plus a weekly schedule
-to pick up new navio-core releases. It currently runs **test builds only**
-(`push: false`).
+for `linux/amd64` and `linux/arm64` on every push and PR. It currently runs
+**test builds only** (`push: false`).
+
+### Automatic rebuilds on new navio-core releases
+
+The workflow tracks upstream releases without any access to `nav-io/navio-core`:
+
+- **Poll (every 6h):** a scheduled run resolves the newest navio-core release
+  and builds **only if that version changed**. Each built version is recorded as
+  a `built/<version>` git tag, so unchanged polls do no work.
+- **Instant trigger:** fire a `repository_dispatch` to build right away:
+
+  ```bash
+  gh api repos/mxaddict/navio-docker/dispatches -f event_type=navio-core-release
+  ```
+
+For truly instant rebuilds, add a `release: published` workflow to
+`nav-io/navio-core` that dispatches the event (needs a PAT with `contents:write`
+on this repo stored as a secret there):
+
+```yaml
+# .github/workflows/notify-docker.yml in nav-io/navio-core
+on:
+  release:
+    types: [published]
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          gh api repos/mxaddict/navio-docker/dispatches \
+              -f event_type=navio-core-release
+        env:
+          GH_TOKEN: ${{ secrets.NAVIO_DOCKER_DISPATCH_PAT }}
+```
 
 ## Deploy (TODO)
 
