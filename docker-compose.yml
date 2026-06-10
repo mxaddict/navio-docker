@@ -1,0 +1,25 @@
+services:
+  naviod:
+    image: mxaddict/navio:latest
+    # Or build locally:
+    # build: .
+    container_name: naviod
+    restart: unless-stopped
+    # Drop `-testnet` to run mainnet (default).
+    command: ["naviod", "-testnet"]
+    volumes:
+      - navio-data:/home/navio/.navio
+    ports:
+      - "33670:33670" # testnet P2P (mainnet: 48470)
+      # RPC stays loopback-only unless you configure auth + -rpcbind:
+      # - "127.0.0.1:33677:33677"
+    healthcheck:
+      # Matches the -testnet command above; use the mainnet defaults otherwise.
+      test: ["CMD", "navio-cli", "-testnet", "getblockchaininfo"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  navio-data:

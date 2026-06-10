@@ -31,16 +31,28 @@ jobs:
             - name: Set up Docker Buildx
               uses: docker/setup-buildx-action@v3
 
+            - name: Resolve navio-core release version
+              id: ver
+              run: |
+                  # The version that the Dockerfile will bundle (newest release
+                  # that ships binaries). Tag the image with it, sans leading "v".
+                  tag="$(curl -fsSL \
+                      https://api.github.com/repos/nav-io/navio-core/releases?per_page=30 \
+                      | tr -d '\000-\037' \
+                      | jq -r 'map(select(any(.assets[]?; .name | endswith("x86_64-linux-gnu.tar.gz")))) | .[0].tag_name')"
+                  echo "navio=${tag#v}" >> "$GITHUB_OUTPUT"
+                  echo "resolved navio version: ${tag#v}"
+
             - name: Docker metadata
               id: meta
               uses: docker/metadata-action@v5
               with:
                   images: ${{ env.IMAGE_NAME }}
                   tags: |
-                      type=ref,event=branch
+                      type=raw,value=${{ steps.ver.outputs.navio }}
+                      type=raw,value=latest,enable={{is_default_branch}}
                       type=ref,event=pr
                       type=sha
-                      type=raw,value=latest,enable={{is_default_branch}}
 
             # TODO(deploy): log in to Docker Hub before enabling push.
             # Requires repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN.
@@ -61,5 +73,19 @@ jobs:
                   push: false
                   tags: ${{ steps.meta.outputs.tags }}
                   labels: ${{ steps.meta.outputs.labels }}
+                  annotations: ${{ steps.meta.outputs.annotations }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
+                  # TODO(deploy): supply-chain attestations for published images.
+                  # provenance: true
+                  # sbom: true
+
+            # TODO(deploy): keep the Docker Hub repo overview in sync with README.
+            # - name: Sync Docker Hub description
+            #   if: github.event_name != 'pull_request'
+            #   uses: peter-evans/dockerhub-description@v4
+            #   with:
+            #       username: ${{ secrets.DOCKERHUB_USERNAME }}
+            #       password: ${{ secrets.DOCKERHUB_TOKEN }}
+            #       repository: ${{ env.IMAGE_NAME }}
+            #       short-description: "Thin Navio full-node image built from official release binaries"

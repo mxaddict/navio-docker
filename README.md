@@ -1,23 +1,25 @@
 # navio-docker
 
-Thin Docker image for running a [Navio](https://github.com/nav-io/navio-core) full node.
+Thin Docker image for running a [Navio](https://github.com/nav-io/navio-core)
+full node.
 
 The image ships the **official, pre-built `navio-core` release binaries** —
-downloaded and checksum-verified at build time — on top of `debian:bookworm-slim`.
-The release binaries are statically linked against everything except glibc, so the
-runtime layer carries no extra libraries. No compilation happens in this repo; it
-only packages upstream releases.
+downloaded and checksum-verified at build time — on top of
+`debian:bookworm-slim`. The release binaries are statically linked against
+everything except glibc, so the runtime layer carries no extra libraries. No
+compilation happens in this repo; it only packages upstream releases.
 
 ## Image contents
 
-- `naviod`, `navio-cli`, `navio-wallet`, `navio-staker`, `navio-tx`, `navio-util`
+- `naviod`, `navio-cli`, `navio-wallet`, `navio-staker`, `navio-tx`,
+  `navio-util`
 - `tini` as PID 1 for clean signal handling and zombie reaping
 - Runs as a non-root `navio` user; datadir at `/home/navio/.navio` (a volume)
 
 ## Usage
 
-> Publishing to Docker Hub is not wired up yet — see [Deploy](#deploy-todo).
-> For now, build the image locally.
+> Publishing to Docker Hub is not wired up yet — see [Deploy](#deploy-todo). For
+> now, build the image locally.
 
 ```bash
 docker build -t navio .
@@ -45,15 +47,25 @@ Run `navio-cli` against a running container:
 docker exec <container> navio-cli -testnet getblockchaininfo
 ```
 
+### Docker Compose
+
+A ready-to-edit [`docker-compose.yml`](docker-compose.yml) is included (testnet
+by default, persistent volume, healthcheck):
+
+```bash
+docker compose up -d
+docker compose logs -f
+```
+
 ### Ports
 
-| Network   | P2P   | RPC   |
-| --------- | ----- | ----- |
-| mainnet   | 48470 | 48471 |
-| testnet7  | 33670 | 33677 |
+| Network  | P2P   | RPC   |
+| -------- | ----- | ----- |
+| mainnet  | 48470 | 48471 |
+| testnet7 | 33670 | 33677 |
 
-RPC binds to loopback by default. Only publish an RPC port if you have configured
-authentication and `-rpcallowip`/`-rpcbind` deliberately.
+RPC binds to loopback by default. Only publish an RPC port if you have
+configured authentication and `-rpcallowip`/`-rpcbind` deliberately.
 
 ### Configuration
 
@@ -68,9 +80,9 @@ docker run --rm -it \
 
 ## Build arguments
 
-| Arg                  | Default  | Effect                                                        |
-| -------------------- | -------- | ------------------------------------------------------------- |
-| `NAVIO_RELEASE_TAG`  | `latest` | navio-core release to ship. `latest` = newest (incl. rc). Pin with e.g. `v0.1rc30`. |
+| Arg                 | Default  | Effect                                                                              |
+| ------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `NAVIO_RELEASE_TAG` | `latest` | navio-core release to ship. `latest` = newest (incl. rc). Pin with e.g. `v0.1rc30`. |
 
 ```bash
 docker build --build-arg NAVIO_RELEASE_TAG=v0.1rc30 -t navio:rc30 .
@@ -83,18 +95,24 @@ docker build --build-arg NAVIO_RELEASE_TAG=v0.1rc30 -t navio:rc30 .
 
 ## CI
 
-[`.github/workflows/build.yml`](.github/workflows/build.yml) builds the image for
-`linux/amd64` and `linux/arm64` on every push and PR, plus a weekly schedule to
-pick up new navio-core releases. It currently runs **test builds only** (`push: false`).
+[`.github/workflows/build.yml`](.github/workflows/build.yml) builds the image
+for `linux/amd64` and `linux/arm64` on every push and PR, plus a weekly schedule
+to pick up new navio-core releases. It currently runs **test builds only**
+(`push: false`).
 
 ## Deploy (TODO)
 
-Publishing to Docker Hub is intentionally left as a follow-up:
+Publishing to Docker Hub is intentionally left as a follow-up. The workflow
+already resolves meaningful image tags (`<navio-version>`, `latest`, `pr-N`,
+`sha-…`); to turn on publishing:
 
 1. Create a Docker Hub repository (default target: `mxaddict/navio`).
-2. Add repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+2. Add repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (use a
+   Docker Hub access token, not your account password).
 3. Uncomment the **Log in to Docker Hub** step in the workflow.
 4. Set the build step's `push` to `github.event_name != 'pull_request'`.
+5. (Optional) Enable `provenance`/`sbom` attestations and the **Sync Docker Hub
+   description** step — both are scaffolded as TODOs in the workflow.
 
 ## License
 
