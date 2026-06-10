@@ -1,0 +1,3 @@
+# build artifacts / local test
+*.log
+.DS_Store
