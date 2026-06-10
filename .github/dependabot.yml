@@ -4,8 +4,20 @@ updates:
       directory: /
       schedule:
           interval: weekly
+      # Major-only: actions are pinned to major tags, ignore minor/patch noise.
+      ignore:
+          - dependency-name: '*'
+            update-types:
+                - version-update:semver-minor
+                - version-update:semver-patch
 
     - package-ecosystem: docker
       directory: /
       schedule:
           interval: weekly
+      # Major-only: ignore minor/patch base-image bumps.
+      ignore:
+          - dependency-name: '*'
+            update-types:
+                - version-update:semver-minor
+                - version-update:semver-patch
