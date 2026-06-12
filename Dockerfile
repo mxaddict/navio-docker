@@ -91,7 +91,7 @@ FROM debian:bookworm-slim
 
 LABEL org.opencontainers.image.title="navio" \
       org.opencontainers.image.description="Navio full node (naviod) — thin image built from official navio-core release binaries" \
-      org.opencontainers.image.source="https://github.com/mxaddict/navio-docker" \
+      org.opencontainers.image.source="https://github.com/nav-io/navio-docker" \
       org.opencontainers.image.licenses="MIT"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

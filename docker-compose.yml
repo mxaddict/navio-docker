@@ -1,6 +1,6 @@
 services:
   naviod:
-    image: mxaddict/navio:latest
+    image: navio/navio:latest
     # Or build locally:
     # build: .
     container_name: naviod

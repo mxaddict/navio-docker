@@ -18,7 +18,7 @@ compilation happens in this repo; it only packages upstream releases.
 
 ## Usage
 
-> Once published, pull `mxaddict/navio` from Docker Hub (see
+> Once published, pull `navio/navio` from Docker Hub (see
 > [Publishing to Docker Hub](#publishing-to-docker-hub)). To build it yourself:
 
 ```bash
@@ -110,7 +110,7 @@ The workflow tracks upstream releases without any access to `nav-io/navio-core`:
 - **Instant trigger:** fire a `repository_dispatch` to build right away:
 
   ```bash
-  gh api repos/mxaddict/navio-docker/dispatches -f event_type=navio-core-release
+  gh api repos/nav-io/navio-docker/dispatches -f event_type=navio-core-release
   ```
 
 For truly instant rebuilds, add a `release: published` workflow to
@@ -127,7 +127,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          gh api repos/mxaddict/navio-docker/dispatches \
+          gh api repos/nav-io/navio-docker/dispatches \
               -f event_type=navio-core-release
         env:
           GH_TOKEN: ${{ secrets.NAVIO_DOCKER_DISPATCH_PAT }}
@@ -139,7 +139,7 @@ Publishing is enabled in the workflow (login → build+push → description sync
 Image tags: `<navio-version>`, `latest`, `pr-N`, `sha-…`. It needs two pieces of
 setup:
 
-1. Create the Docker Hub repository (default target: `mxaddict/navio`).
+1. Create the Docker Hub repository (default target: `navio/navio`).
 2. Add repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (use a
    Docker Hub access token, not your account password).
 
