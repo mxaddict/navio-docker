@@ -111,6 +111,21 @@ jobs:
                       type=ref,event=pr
                       type=sha
 
+            # Same tags as the node image, suffixed: <version>-i2p, latest-i2p, …
+            - name: Docker metadata (i2p)
+              id: meta-i2p
+              if: steps.decide.outputs.build == 'true'
+              uses: docker/metadata-action@v6
+              with:
+                  images: ${{ env.IMAGE_NAME }}
+                  flavor: |
+                      suffix=-i2p
+                  tags: |
+                      type=raw,value=${{ steps.ver.outputs.navio }}
+                      type=raw,value=latest,enable={{is_default_branch}}
+                      type=ref,event=pr
+                      type=sha
+
             - name: Log in to Docker Hub
               if: steps.decide.outputs.build == 'true' && github.event_name != 'pull_request'
               uses: docker/login-action@v4
@@ -123,17 +138,34 @@ jobs:
               uses: docker/build-push-action@v7
               with:
                   context: .
+                  target: node
                   platforms: linux/amd64,linux/arm64
                   # Publish on every non-PR event; PRs build for verification only.
                   push: ${{ github.event_name != 'pull_request' }}
                   tags: ${{ steps.meta.outputs.tags }}
                   labels: ${{ steps.meta.outputs.labels }}
                   annotations: ${{ steps.meta.outputs.annotations }}
-                  cache-from: type=gha
-                  cache-to: type=gha,mode=max
+                  # One cache scope per target so the two builds don't
+                  # overwrite each other's cache manifest.
+                  cache-from: type=gha,scope=node
+                  cache-to: type=gha,mode=max,scope=node
                   # TODO(deploy): supply-chain attestations for published images.
                   # provenance: true
                   # sbom: true
+
+            - name: Build and push (i2p)
+              if: steps.decide.outputs.build == 'true'
+              uses: docker/build-push-action@v7
+              with:
+                  context: .
+                  target: i2p
+                  platforms: linux/amd64,linux/arm64
+                  push: ${{ github.event_name != 'pull_request' }}
+                  tags: ${{ steps.meta-i2p.outputs.tags }}
+                  labels: ${{ steps.meta-i2p.outputs.labels }}
+                  annotations: ${{ steps.meta-i2p.outputs.annotations }}
+                  cache-from: type=gha,scope=i2p
+                  cache-to: type=gha,mode=max,scope=i2p
 
             - name: Sync Docker Hub description
               if: steps.decide.outputs.build == 'true' && github.event_name != 'pull_request'

@@ -3,16 +3,23 @@ services:
     image: navio/navio:latest
     # Or build locally:
     # build: .
+    # For I2P, use the image with i2pd bundled (`navio/navio:latest-i2p`, or
+    # `build: {context: ., target: i2p}`), uncomment the i2pd volume and port
+    # entries below, and the `i2pd-data` volume at the bottom.
     container_name: naviod
     restart: unless-stopped
     # Drop `-testnet` to run mainnet (default).
     command: ["naviod", "-testnet"]
     volumes:
       - navio-data:/home/navio/.navio
+      # - i2pd-data:/home/navio/.i2pd
     ports:
       - "33670:33670" # testnet P2P (mainnet: 48470)
       # RPC stays loopback-only unless you configure auth + -rpcbind:
       # - "127.0.0.1:33677:33677"
+      # i2pd router port (i2p image) — optional, makes the router reachable:
+      # - "48480:48480/tcp"
+      # - "48480:48480/udp"
     healthcheck:
       # Matches the -testnet command above; use the mainnet defaults otherwise.
       test: ["CMD", "navio-cli", "-testnet", "getblockchaininfo"]
@@ -23,3 +30,4 @@ services:
 
 volumes:
   navio-data:
+  # i2pd-data:

@@ -6,11 +6,21 @@
 # checksum-verified at build time) on top of debian-slim. The release binaries
 # are statically linked against everything except glibc, so the runtime layer
 # needs no extra libraries.
+#
+# Two targets:
+#   node (default) — naviod and the CLI tools only
+#   i2p            — node plus a bundled i2pd router, wired to naviod via SAM
 
 ############################################
 # Stage 1 — fetch + verify release binaries
 ############################################
-FROM debian:bookworm-slim AS fetch
+FROM debian:bookworm-slim AS fetch-base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl jq \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM fetch-base AS fetch
 
 # Which navio-core release to ship. "latest" resolves the newest release
 # (including release candidates) from the GitHub API at build time. Override
@@ -22,10 +32,6 @@ ARG TARGETARCH
 ARG TARGETVARIANT
 
 ARG GITHUB_API=https://api.github.com/repos/nav-io/navio-core
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl jq \
-    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /tmp/navio
 
@@ -85,9 +91,36 @@ RUN set -eux; \
     ls -la /opt/navio/bin
 
 ############################################
+# Stage 1b — fetch + verify the i2pd package (i2p target only)
+############################################
+FROM fetch-base AS fetch-i2pd
+
+# i2pd release to bundle. Bump to pick up i2pd fixes independently of navio.
+ARG I2PD_VERSION=2.61.0
+ARG TARGETARCH
+ARG TARGETVARIANT
+
+WORKDIR /tmp/i2pd
+
+# Upstream publishes a Debian bookworm .deb per architecture plus SHA512SUMS.
+RUN set -eux; \
+    case "${TARGETARCH}${TARGETVARIANT:+/${TARGETVARIANT}}" in \
+        amd64)  DEB_ARCH="amd64" ;; \
+        arm64)  DEB_ARCH="arm64" ;; \
+        arm/v7) DEB_ARCH="armhf" ;; \
+        *) echo "no i2pd bookworm package for platform: ${TARGETARCH}${TARGETVARIANT:-}" >&2; exit 1 ;; \
+    esac; \
+    BASE="https://github.com/PurpleI2P/i2pd/releases/download/${I2PD_VERSION}"; \
+    DEB="i2pd_${I2PD_VERSION}-1bookworm1_${DEB_ARCH}.deb"; \
+    curl -fsSL -o "${DEB}" "${BASE}/${DEB}"; \
+    curl -fsSL -o SHA512SUMS "${BASE}/SHA512SUMS"; \
+    sha512sum --ignore-missing --check SHA512SUMS; \
+    mv "${DEB}" /tmp/i2pd.deb
+
+############################################
 # Stage 2 — thin runtime image
 ############################################
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim AS base
 
 LABEL org.opencontainers.image.title="navio" \
       org.opencontainers.image.description="Navio full node (naviod) — thin image built from official navio-core release binaries" \
@@ -115,3 +148,40 @@ EXPOSE 48470 48471 33670 33677
 
 ENTRYPOINT ["tini", "--", "entrypoint.sh"]
 CMD ["naviod"]
+
+############################################
+# Target: i2p — node plus a bundled i2pd router
+############################################
+FROM base AS i2p
+
+LABEL org.opencontainers.image.description="Navio full node (naviod) with a bundled i2pd router — built from official navio-core and i2pd releases"
+
+USER root
+# apt resolves the package's runtime libraries (boost, openssl, miniupnpc).
+# Nothing runs the package's init/systemd units in a container; the entrypoint
+# starts i2pd instead.
+COPY --from=fetch-i2pd /tmp/i2pd.deb /tmp/i2pd.deb
+RUN apt-get update && apt-get install -y --no-install-recommends /tmp/i2pd.deb \
+    && rm -rf /var/lib/apt/lists/* /tmp/i2pd.deb
+COPY i2pd.conf /etc/i2pd/i2pd.conf
+
+USER navio
+RUN mkdir -p /home/navio/.i2pd
+VOLUME ["/home/navio/.i2pd"]
+
+# Tells the entrypoint to start i2pd and point naviod at its SAM bridge.
+# Set NAVIO_I2P=0 at run time to run the node without it.
+ENV NAVIO_I2P=1
+
+# i2pd router transport (NTCP2 TCP + SSU2 UDP); see `port` in i2pd.conf.
+EXPOSE 48480/tcp 48480/udp
+
+# -g sends `docker stop`'s SIGTERM to i2pd as well as naviod.
+ENTRYPOINT ["tini", "-g", "--", "entrypoint.sh"]
+# Setting ENTRYPOINT resets the CMD inherited from base, so restate it.
+CMD ["naviod"]
+
+############################################
+# Target: node (default) — declared last so a plain `docker build` picks it
+############################################
+FROM base AS node
