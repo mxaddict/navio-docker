@@ -15,8 +15,17 @@ headings of its own yet.
   other client services are off (`i2pd.conf`). Router state persists in the
   `/home/navio/.i2pd` volume; `NAVIO_I2P=0` disables it at run time.
 - `I2PD_VERSION` build argument pinning the bundled i2pd release.
+- `tor` image variant (`<version>-tor`, `latest-tor`; Dockerfile target `tor`)
+  bundling Debian's Tor client. The entrypoint starts Tor and runs `naviod` with
+  `-onion=127.0.0.1:9050`; naviod publishes an onion service through Tor's
+  control port (cookie auth). Both Tor ports are bound to loopback (`torrc`),
+  state persists in the `/home/navio/.tor` volume, and `NAVIO_TOR=0` disables it
+  at run time.
 
 ### Changed
 
-- The Dockerfile now has two targets, `node` (the default, unchanged image) and
-  `i2p`; CI builds and publishes both.
+- The Dockerfile now has three targets, `node` (the default), `i2p` and `tor`;
+  CI builds and publishes all of them as a parallel matrix, and only marks a
+  release as built once every variant has been pushed.
+- The entrypoint runs under `tini -g` in every image, so `docker stop` signals
+  the whole process group.

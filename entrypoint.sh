@@ -17,6 +17,14 @@ if [ "$1" = "naviod" ]; then
             --certsdir=/usr/share/i2pd/certificates &
         set -- -i2psam=127.0.0.1:7656 "$@"
     fi
+    # tor image: start the bundled tor. naviod's -torcontrol default
+    # (127.0.0.1:9051) already finds its control port to publish an onion
+    # service; -onion routes .onion peers through its SOCKS port from the
+    # start, before the control connection is up. User flags still win.
+    if [ "${NAVIO_TOR:-0}" = "1" ]; then
+        tor -f /etc/tor/torrc &
+        set -- -onion=127.0.0.1:9050 "$@"
+    fi
     set -- naviod -printtoconsole "$@"
 fi
 

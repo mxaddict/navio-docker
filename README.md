@@ -16,14 +16,15 @@ compilation happens in this repo; it only packages upstream releases.
 - `tini` as PID 1 for clean signal handling and zombie reaping
 - Runs as a non-root `navio` user; datadir at `/home/navio/.navio` (a volume)
 
-Two variants are built from the same Dockerfile:
+Three variants are built from the same Dockerfile:
 
-| Variant    | Dockerfile target | Tags                          | Adds                                     |
-| ---------- | ----------------- | ----------------------------- | ---------------------------------------- |
-| node       | `node` (default)  | `<version>`, `latest`         | —                                        |
-| node + I2P | `i2p`             | `<version>-i2p`, `latest-i2p` | [i2pd](https://i2pd.website/) I2P router |
+| Variant    | Dockerfile target | Tags                          | Adds                                      |
+| ---------- | ----------------- | ----------------------------- | ----------------------------------------- |
+| node       | `node` (default)  | `<version>`, `latest`         | —                                         |
+| node + I2P | `i2p`             | `<version>-i2p`, `latest-i2p` | [i2pd](https://i2pd.website/) I2P router  |
+| node + Tor | `tor`             | `<version>-tor`, `latest-tor` | [Tor](https://www.torproject.org/) client |
 
-See [I2P](#i2p) for the second one.
+See [I2P](#i2p) and [Tor](#tor) for the bundled-router variants.
 
 ## Usage
 
@@ -127,6 +128,40 @@ docker run --rm -it \
 Prefer a separate router? The plain image works with any i2pd you already run:
 start `naviod` with `-i2psam=<host>:7656` pointing at its SAM port.
 
+## Tor
+
+The `-tor` images bundle a Tor client (Debian's `tor` package). When the
+container runs `naviod`, the entrypoint first starts Tor in the background and
+then starts `naviod` with `-onion=127.0.0.1:9050`. naviod finds Tor's control
+port at its default `-torcontrol` address (`127.0.0.1:9051`), authenticates with
+Tor's cookie file, and publishes the node as an onion service:
+
+```bash
+docker build --target tor -t navio:tor .
+
+docker run --rm -it     -v navio-data:/home/navio/.navio     -v tor-data:/home/navio/.tor     -p 33670:33670     navio:tor -testnet
+```
+
+- **Nothing to publish for Tor.** It runs as a client only (no relay), with its
+  SOCKS and control ports on loopback — see [`torrc`](torrc). The onion service
+  reaches naviod through Tor's own circuits, so no port mapping is needed.
+- **Onion address** is stable across restarts: naviod caches the service key as
+  `onion_v3_private_key` in its datadir. Find it with `navio-cli getnetworkinfo`
+  under `localaddresses`.
+- **Tor state** lives in `/home/navio/.tor`. Keep it on a volume so Tor does not
+  rebuild its guard set on every start. Tor refuses a data directory others can
+  read; a named volume keeps the image's `0700` mode, while a bind mount needs
+  `chmod 700` on the host directory.
+- **Default is hybrid:** clearnet peers stay direct and only `.onion` peers go
+  through Tor. For a Tor-only node add `-proxy=127.0.0.1:9050 -onlynet=onion`.
+- **Logs** from both daemons go to `docker logs`.
+- **Own Tor config:** mount it at `/etc/tor/torrc`. Keep the SOCKS port on
+  `127.0.0.1:9050` and the control port on `127.0.0.1:9051` with cookie
+  authentication, or pass matching `-onion=` / `-torcontrol=` flags.
+- **Turning it off:** `-e NAVIO_TOR=0` runs the `-tor` image as a plain node.
+- **No supervision:** if Tor exits, `naviod` keeps running without it until the
+  container is restarted.
+
 ## Build arguments
 
 | Arg                 | Default  | Effect                                                                              |
@@ -142,15 +177,17 @@ docker build --build-arg NAVIO_RELEASE_TAG=v0.1rc30 -t navio:rc30 .
 
 `linux/amd64`, `linux/arm64` are built in CI. The Dockerfile additionally maps
 `linux/arm/v7`, `linux/ppc64le`, and `linux/riscv64` to their release triplets.
-The `i2p` target supports `linux/amd64`, `linux/arm64` and `linux/arm/v7` only,
-the architectures i2pd publishes bookworm packages for.
+The `tor` target has no platform limits beyond the node image's. The `i2p`
+target supports `linux/amd64`, `linux/arm64` and `linux/arm/v7` only, the
+architectures i2pd publishes bookworm packages for.
 
 ## CI
 
-[`.github/workflows/build.yml`](.github/workflows/build.yml) builds both images
-(`node` and `i2p` targets) for `linux/amd64` and `linux/arm64`. Pull requests
-build for verification only (no push); every other event (push to `master`,
-schedule, dispatch, manual) **publishes to Docker Hub**.
+[`.github/workflows/build.yml`](.github/workflows/build.yml) builds all three
+images (`node`, `i2p` and `tor` targets, in parallel) for `linux/amd64` and
+`linux/arm64`. Pull requests build for verification only (no push); every other
+event (push to `master`, schedule, dispatch, manual) **publishes to Docker
+Hub**.
 
 ### Automatic rebuilds on new navio-core releases
 
@@ -189,7 +226,8 @@ jobs:
 
 Publishing is enabled in the workflow (login → build+push → description sync).
 Image tags: `<navio-version>`, `latest`, `pr-N`, `sha-…`, each also with an
-`-i2p` suffix for the I2P image. It needs two pieces of setup:
+`-i2p` or `-tor` suffix for the bundled-router images. It needs two pieces of
+setup:
 
 1. Create the Docker Hub repository (default target: `navio/navio`).
 2. Add repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (use a

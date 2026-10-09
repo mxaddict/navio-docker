@@ -6,6 +6,8 @@ services:
     # For I2P, use the image with i2pd bundled (`navio/navio:latest-i2p`, or
     # `build: {context: ., target: i2p}`), uncomment the i2pd volume and port
     # entries below, and the `i2pd-data` volume at the bottom.
+    # For Tor, likewise use `navio/navio:latest-tor` (or target: tor) and
+    # uncomment the tor volume entries; Tor needs no published ports.
     container_name: naviod
     restart: unless-stopped
     # Drop `-testnet` to run mainnet (default).
@@ -13,6 +15,7 @@ services:
     volumes:
       - navio-data:/home/navio/.navio
       # - i2pd-data:/home/navio/.i2pd
+      # - tor-data:/home/navio/.tor
     ports:
       - "33670:33670" # testnet P2P (mainnet: 48470)
       # RPC stays loopback-only unless you configure auth + -rpcbind:
@@ -31,3 +34,4 @@ services:
 volumes:
   navio-data:
   # i2pd-data:
+  # tor-data:

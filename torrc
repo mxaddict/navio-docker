@@ -1,0 +1,14 @@
+## Tor configuration for the navio-docker `tor` image.
+##
+## Tor runs next to naviod in the same container as a client only (no relay).
+## Its SOCKS and control ports listen on loopback; naviod uses the SOCKS port
+## for .onion peers and the control port (cookie auth) to publish its own
+## onion service. Replace this file by mounting your own at /etc/tor/torrc.
+
+SocksPort 127.0.0.1:9050
+ControlPort 127.0.0.1:9051
+CookieAuthentication 1
+
+DataDirectory /home/navio/.tor
+
+Log notice stdout

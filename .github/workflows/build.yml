@@ -110,6 +110,8 @@ jobs:
                       suffix: ''
                     - target: i2p
                       suffix: -i2p
+                    - target: tor
+                      suffix: -tor
         steps:
             - name: Checkout
               uses: actions/checkout@v6

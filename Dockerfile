@@ -7,9 +7,10 @@
 # are statically linked against everything except glibc, so the runtime layer
 # needs no extra libraries.
 #
-# Two targets:
+# Targets:
 #   node (default) — naviod and the CLI tools only
 #   i2p            — node plus a bundled i2pd router, wired to naviod via SAM
+#   tor            — node plus a bundled Tor client and onion service
 
 ############################################
 # Stage 1 — fetch + verify release binaries
@@ -146,7 +147,9 @@ VOLUME ["/home/navio/.navio"]
 # RPC ports are loopback-only by default — map them explicitly if you expose RPC.
 EXPOSE 48470 48471 33670 33677
 
-ENTRYPOINT ["tini", "--", "entrypoint.sh"]
+# -g sends `docker stop`'s SIGTERM to the whole process group, so a bundled
+# router (i2p/tor targets) stops along with naviod.
+ENTRYPOINT ["tini", "-g", "--", "entrypoint.sh"]
 CMD ["naviod"]
 
 ############################################
@@ -176,10 +179,28 @@ ENV NAVIO_I2P=1
 # i2pd router transport (NTCP2 TCP + SSU2 UDP); see `port` in i2pd.conf.
 EXPOSE 48480/tcp 48480/udp
 
-# -g sends `docker stop`'s SIGTERM to i2pd as well as naviod.
-ENTRYPOINT ["tini", "-g", "--", "entrypoint.sh"]
-# Setting ENTRYPOINT resets the CMD inherited from base, so restate it.
-CMD ["naviod"]
+############################################
+# Target: tor — node plus a bundled Tor client
+############################################
+FROM base AS tor
+
+LABEL org.opencontainers.image.description="Navio full node (naviod) with a bundled Tor client — built from official navio-core releases and Debian's tor package"
+
+USER root
+# Debian's tor package; bookworm receives new tor releases via stable updates.
+# Nothing runs its init/systemd units in a container; the entrypoint starts tor.
+RUN apt-get update && apt-get install -y --no-install-recommends tor \
+    && rm -rf /var/lib/apt/lists/*
+COPY torrc /etc/tor/torrc
+
+USER navio
+# Tor refuses a DataDirectory readable by anyone but its owner.
+RUN mkdir -m 700 /home/navio/.tor
+VOLUME ["/home/navio/.tor"]
+
+# Tells the entrypoint to start tor and point naviod at it.
+# Set NAVIO_TOR=0 at run time to run the node without it.
+ENV NAVIO_TOR=1
 
 ############################################
 # Target: node (default) — declared last so a plain `docker build` picks it
